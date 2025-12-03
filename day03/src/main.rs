@@ -84,10 +84,72 @@ fn first(filename:&str) {
     println!("Final: {sum}");
 }
 
+fn get_largest(arr:&Vec<i64>,index:i64,pad:i64) -> (i64,i64) {
+
+    let mut max_i = 0;
+    let mut max = 0;
+
+    if arr.len() - (pad as usize) < 0 {
+        return (0,0); // fuck errorhandling for now
+    }
+
+    for i in index..((arr.len()-(pad as usize)) as i64) {
+        if max < arr[i as usize] {
+            max = arr[i as usize];
+            max_i = i; 
+        }
+    }
+
+    (max_i,max)
+
+}
+
+fn second(filename:&str) {
+    let input = get_file_data(filename);
+
+    //let mut zero:Vec<i64>=vec![];
+    let mut sum:i64=0;
+
+    for (_,rivi) in input.lines().enumerate() {
+
+        let row_r: Vec<i64> = rivi
+            .chars()
+            .map(|c| c.to_digit(10).unwrap() as i64)
+            .collect();
+
+        let mut jolt = 0;
+        let mut val = 0;
+        let mut index = 0;
+
+        for i in (0..12).rev() {
+            (index,val) = get_largest(&row_r,index,i);
+            index+=1;
+        print!("{index},");
+            
+            jolt = jolt*10+val;
+        }
+
+    
+        print!("[");
+        for i in 0..row_r.len() {
+                print!("{}",row_r[i]);
+        }
+
+        println!("] max jolt: {}",jolt);
+        
+        sum +=jolt;
+    }
+
+
+    println!("Final: {sum}");
+}
+
+
 
 fn main() {
 
 
-    first("input.txt");
+    first("test.txt");
+    second("test.txt");
 
 }
