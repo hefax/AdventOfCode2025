@@ -45,16 +45,16 @@ fn get_file_data(filename:&str) -> String {
     input
 }
 
-fn get_distance(j1:&Junction,j2:&Junction) -> f64 {
-    let dx =( j2.x - j1.x ) as f64;
-    let dy =( j2.y - j1.y ) as f64;
-    let dz =( j2.z - j1.z ) as f64;
-    (dx*dx + dy*dy + dz*dz).sqrt()
+fn get_distance(j1:&Junction,j2:&Junction) -> i64 {
+    let dx =( j2.x - j1.x ) as i64;
+    let dy =( j2.y - j1.y ) as i64;
+    let dz =( j2.z - j1.z ) as i64;
+    (dx*dx + dy*dy + dz*dz)
 }
 
-fn map_distance(j:&Junction,list:&HashMap<String,Junction>) -> HashMap<String,f64> {
+fn map_distance(j:&Junction,list:&HashMap<String,Junction>) -> HashMap<String,i64> {
     
-    let mut result: HashMap<String,f64> = HashMap::new();
+    let mut result: HashMap<String,i64> = HashMap::new();
 
     let orig = j.to_string();
     for (name,item) in list.iter() {
@@ -90,22 +90,36 @@ fn first(filename:&str) {
         items.insert(coord.to_string(),coord);
     }
 
-    let mut result: HashMap<String,f64> = HashMap::new();
+    // let mut result: HashMap<String,f64> = HashMap::new();
+    let mut map: HashMap<i64,(Junction,Junction)> = HashMap::new();
     for (name,item) in items.iter() {
 
         let set = map_distance(&item,&items);
 
-        for (k,v) in set.iter() {
-            result.insert(k.clone(),*v);
+        for (node,distance) in set.iter() {
+            map.insert(*distance,
+                (
+                    items.get(name).unwrap().clone(),
+                    items.get(node).unwrap().clone()
+                )
+            );
         }
     }
 
+    let mut keys = Vec::from_iter(map.keys());
+    keys.sort_by(|a,b| a.cmp(b));
+
+    for i in 0..10 {
+        println!("{} {:?}",keys[i],map.get(keys[i]).unwrap());
+
+    }
+    
     // ok idea oli. distance -> pairs info.
     // go though distances and connect nodes. 
     // group nodes and handle mapping that way.
 
 
-    println!("{:?}",result);
+    // println!("{:?}",map);
 }
 
 
