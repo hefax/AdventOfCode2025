@@ -86,8 +86,8 @@ fn get_map(input:&HashMap<String,Pos>,order:&Vec<String>) -> Vec<Vec<Cell>> {
 
     let mut x_max:i64=0;
     let mut y_max:i64=0;
-    let mut x_min:i64=100000;
-    let mut y_min:i64=100000;
+    let mut x_min:i64=0;
+    let mut y_min:i64=0;
 
     for (_key,pos) in input.iter() {
         if x_max < pos.x {
@@ -97,6 +97,8 @@ fn get_map(input:&HashMap<String,Pos>,order:&Vec<String>) -> Vec<Vec<Cell>> {
             y_max = pos.y +1;
         }   
 
+        /* Initially a good idea, but caused indexing issues. a couple of million 
+         * extra cells don't matter in this case that much. 
         if x_min > pos.x {
             x_min = pos.x -1;
         }
@@ -104,9 +106,11 @@ fn get_map(input:&HashMap<String,Pos>,order:&Vec<String>) -> Vec<Vec<Cell>> {
         if y_min > pos.y {
             y_min = pos.y -1;
         }
+        */
     }
 
-    for _y in y_min..=y_max {
+    for y in y_min..=y_max {
+        println!("Initializing y: {y}");
         let mut tmp:Vec<Cell> = vec![];
         for _x in x_min..=x_max {
             tmp.push(Cell::Free);
@@ -114,6 +118,8 @@ fn get_map(input:&HashMap<String,Pos>,order:&Vec<String>) -> Vec<Vec<Cell>> {
         map.push(tmp);
     }
     
+
+    // Borders. 
     let mut d:char = 'X';
     let mut pd:char = 'X';
     let mut id:char = 'X';
@@ -305,6 +311,7 @@ fn get_map(input:&HashMap<String,Pos>,order:&Vec<String>) -> Vec<Vec<Cell>> {
 
     let mut count:i64=0;
     for y in 0..map.len() {
+        println!("Filling y: {y}");
         for x in 0..map[y].len() {
             match map[y][x] {
                 Cell::GreenBorderV => {
@@ -331,9 +338,6 @@ fn get_map(input:&HashMap<String,Pos>,order:&Vec<String>) -> Vec<Vec<Cell>> {
         count=0;
     }
 
-    // fill the map ö
-    // make map. 
-    
     map
 }
 
@@ -421,6 +425,49 @@ fn check_if_in(map:&Vec<Vec<Cell>>,r1:&Pos,r2:&Pos) -> bool {
     }
 
 
+    // check just the bourders. I have ideas why this should not
+    // work, but lets test it. 
+    for y in y_min..=y_max {
+        match map[y as usize][x_min as usize] {
+            Cell::Free => {
+                return false;
+            }, 
+            _ => {
+                // ok.
+            }
+        };
+        match map[y as usize][x_max as usize] {
+            Cell::Free => {
+                return false;
+            }, 
+            _ => {
+                // ok.
+            }
+        };
+
+    }
+
+    for x in x_min..=x_max {
+        match map[y_min as usize][x as usize] {
+            Cell::Free => {
+                return false;
+            }, 
+            _ => {
+                // ok.
+            }
+        };
+        match map[y_max as usize][x as usize] {
+            Cell::Free => {
+                return false;
+            }, 
+            _ => {
+                // ok.
+            }
+        };
+
+    }
+
+    /* Naive and slow. 
     for y in y_min..=y_max {
         for x in x_min..=x_max {
             match map[y as usize][x as usize] {
@@ -434,7 +481,7 @@ fn check_if_in(map:&Vec<Vec<Cell>>,r1:&Pos,r2:&Pos) -> bool {
 
         }
 
-    }
+    }*/ 
 
     true
 
@@ -454,27 +501,27 @@ fn second(filename:&str) {
     println!("reds ok");
 
     let map = get_map(&reds,&order);
-    print_map(&map);
+    // do not print the map with the real data.. brain stats to hurt. 
+    // print_map(&map);
 
     let mut areas:HashMap<i64,(Pos,Pos)> = HashMap::new();
     
     let keys = Vec::from_iter(reds.keys());
 
     for item in keys {
+        let r1 = reds.get(item).unwrap();
         for (_key,r2) in reds.iter() {
-            let r1 = reds.get(item).unwrap();
-
             if check_if_in(&map,r1,r2)  {
                 let area:i64 = (i64::abs(r1.x-r2.x)+1) * (i64::abs(r1.y-r2.y)+1);
                 areas.insert(
                     area,
                     (r1.clone(),r2.clone())
                 );
-               // println!("added: {:?},{:?}",r1,r2)
+                println!("added: {:?},{:?}",r1,r2)
             }
-
-
-
+            else {
+                println!("rejected: {:?},{:?}",r1,r2)
+            }
         }
     }
 
@@ -484,16 +531,6 @@ fn second(filename:&str) {
     for i in k2 {
         println!("{}: {:?}",i,areas.get(&i).unwrap());
     }
-
-
-    let mut k2 = Vec::from_iter(areas.keys());
-    k2.sort_by(|a,b| a.cmp(b));
-
-    for i in k2 {
-        println!("{}: {:?}",i,areas.get(&i).unwrap());
-    }
-
-
 }
 
 
@@ -501,5 +538,5 @@ fn second(filename:&str) {
 
 fn main() {
     first("test.txt");
-    second("input.txt");
+    second("test.txt");
 }
