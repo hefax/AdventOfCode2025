@@ -37,6 +37,8 @@ fn get_file_data(filename:&str) -> String {
 struct Machine {
     leds:i64,
     buttons: Vec<i64>,
+    buttons_bin:Vec<String>,
+    jolts:Vec<i64>,
 }
 
 fn parse_stuff(input:String) -> Vec<Machine> {
@@ -85,6 +87,7 @@ fn parse_stuff(input:String) -> Vec<Machine> {
 
         // parse the buttons into binary and calcurate ALL combinations 
         let mut button_vals:Vec<i64> = vec![];
+        let mut button_bins:Vec<String> = vec![];
 
         for i in buttons.iter() {
 
@@ -96,29 +99,38 @@ fn parse_stuff(input:String) -> Vec<Machine> {
                     .collect::<Vec<i64>>();
             
 
-            let mut s:String = String::from("");
+            let mut bs:String = String::from("");
             for i in 0..led_len as i64{
                 if lines.contains(&i) {
-                    s = format!("{}{}",s,1);
+                    bs = format!("{}{}",bs,1);
                 }
                 else {
-                    s = format!("{}{}",s,0);
+                    bs = format!("{}{}",bs,0);
                 }
             } 
-            let buttonval:i64 = isize::from_str_radix(s.as_str(), 2).unwrap() as i64;
-            println!("{:?} -> {} -> {}",lines,s,buttonval);
+            let buttonval:i64 = isize::from_str_radix(bs.as_str(), 2).unwrap() as i64;
+            println!("{:?} -> {} -> {}",lines,bs,buttonval);
 
             button_vals.push(buttonval);
+            button_bins.push(bs);
         }
 
-        println!("l: {:?} {} p: {:?} b: {:?} ({:?})",s,intval,power,buttons,button_vals);
 
         // ignore the jolts for now.
         //
+        let jolts:Vec<i64> = power.split(",")
+            .collect::<Vec<&str>>()
+            .iter()
+            .map(|s| FromStr::from_str(s).unwrap())
+            .collect::<Vec<i64>>();
+            
+        println!("l: {:?} {} p: {:?} b: {:?} ({:?})",s,intval,jolts,buttons,button_vals);
 
         let m = Machine{
             leds:intval,
             buttons:button_vals,
+            buttons_bin:button_bins,
+            jolts:jolts,
         };
 
         machines.push(m);
@@ -139,7 +151,7 @@ fn first(filename:&str) {
     for i in machines {
         let mut result:Vec<Vec<i64>> = vec![];
         let set = i.buttons.iter().powerset().collect::<Vec<_>>(); 
-        // println!("{:?}",set);
+     //    println!("XX {:?}",set);
         let mut smol:i64 = 10000;
         //
         for combo in set {
@@ -153,7 +165,7 @@ fn first(filename:&str) {
                 val = val ^ *num;
             }
 
-    //        println!("{:?} {val}",combo);
+            println!("{:?} {val}",combo);
 
             if val == i.leds {
                 let mut tmp:Vec<i64> = vec![];
@@ -181,16 +193,64 @@ fn first(filename:&str) {
 }
 
 
+fn get_button(jolts:&Vec<i64>,buttons:&Vec<String>) {
+    let size:i64 =jolts.len() as i64;
+
+    // select the most important lines. (== highest jolt value.)
+    let mut map:HashMap<i64,i64> = HashMap::new(); 
+    // val -> index
+
+
+    for (i,val) in jolts {
+        map.insert(val,i);
+    }
+
+    let mut keys = Vec::from_iter(map.keys());
+    keys.sort_by(|a,b| a.cmp(b));
+
+
+
+    for i in keys {
+        let index = map.get(&i).unwrap();
+
+        if 
+    }
+
+
+    // select the button that addresses the needs in order (and does 
+    // NOT put anything in negatives)
+
+
+
+    // return button. 
+}
 
 
 fn second(filename:&str) {
-    // do the same as the fist one,
-    // create the map.
-    // start creating rectagles. 
-    // check the rectangle edges if they are in the given area. 
-    // discard rectangles that are not. 
     
     let input = get_file_data(filename);
+    let machines = parse_stuff(input);
+
+    let mut res:i64 = 0;
+
+    for i in machines {
+        let mut result:Vec<Vec<i64>> = vec![];
+
+        
+        // strategy:
+        // select the buttons to closely match the option.
+        // push button. Repeat. 
+        //
+
+
+
+
+        
+        println!("{:?}",result);
+    }
+
+    println!("and we have {res}");
+
 
 }
 
@@ -198,6 +258,6 @@ fn second(filename:&str) {
 
 
 fn main() {
-    first("input.txt");
+    first("test.txt");
     second("test.txt");
 }
