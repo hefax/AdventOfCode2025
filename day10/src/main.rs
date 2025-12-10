@@ -6,6 +6,8 @@ use std::fmt;
 use std::i64;
 use std::collections::HashMap;
 use regex::Regex;
+use itertools::Itertools;
+
 
 fn read_lines<P>(filename: P) -> io::Result<io::Lines<io::BufReader<File>>> 
 where P: AsRef<Path>, {
@@ -32,14 +34,20 @@ fn get_file_data(filename:&str) -> String {
     input
 }
 
+struct Machine {
+    leds:i64,
+    buttons: Vec<i64>,
+}
 
-fn parse_stuff(input:String) {
+fn parse_stuff(input:String) -> Vec<Machine> {
 
     let pattern = format!(r"^\[([.#]*)\] (.*) \{{(.*)\}}");
-    let pattern2 = format!(r"^\(([\d,]*)\)");
+    let pattern2 = format!(r"\(([\d,]*)\)*");
 
     let re = Regex::new(pattern.as_str()).unwrap();
     let re2 = Regex::new(pattern2.as_str()).unwrap();
+
+    let mut machines:Vec<Machine> = vec![];
 
     for (_,rivi) in input.lines().enumerate() {
         let parts = re.captures(rivi).unwrap();
@@ -49,26 +57,74 @@ fn parse_stuff(input:String) {
 
         let mut buttons:Vec<String> = vec![];
 
-        let caps = re2.captures(&parts[2]).unwrap();
+        let caps = re2.captures_iter(&parts[2]);
 
-        for i in 0..caps.len() {
-
-                /*
-                match caps.get(i) {
-                    Some(data) => {
-                        buttons.push(data.map_or("", |m| m.as_str()));
-                    },
-                    None => {}
-                }*/
-
-            let s = caps.get(i).map_or("", |m| m.as_str());
-            buttons.push(s.to_string());
-
+        for i in caps {
+            let s = i[1].to_string();
+            buttons.push(s);
         }
 
-        println!("l: {:?} p: {:?} b: {:?}",leds,power,buttons);
+        // println!("l: {:?} p: {:?} b: {:?}",leds,power,buttons);
+        
+        // parse the leds into binary
+        let l:Vec<char> = leds.chars().collect();
+        
+        let mut s:String = String::from("");
+        for i in l.iter() {
+            let s1 = match i {
+                '#' => "1",
+                '.'=> "0",
+                _ => panic!("nope"),
+            };
+            s = format!("{}{}",s,s1);
+        }
+        let led_len=s.len();
+
+        let intval:i64 = isize::from_str_radix(s.as_str(), 2).unwrap() as i64;
+        println!("{:?} -> {} -> {}",leds,s,intval);
+
+        // parse the buttons into binary and calcurate ALL combinations 
+        let mut button_vals:Vec<i64> = vec![];
+
+        for i in buttons.iter() {
+
+            let lines:Vec<i64> = i.as_str()
+                    .split(",")
+                    .collect::<Vec<&str>>()
+                    .iter()
+                    .map(|s| FromStr::from_str(s).unwrap())
+                    .collect::<Vec<i64>>();
+            
+
+            let mut s:String = String::from("");
+            for i in 0..led_len as i64{
+                if lines.contains(&i) {
+                    s = format!("{}{}",s,1);
+                }
+                else {
+                    s = format!("{}{}",s,0);
+                }
+            } 
+            let buttonval:i64 = isize::from_str_radix(s.as_str(), 2).unwrap() as i64;
+            println!("{:?} -> {} -> {}",lines,s,buttonval);
+
+            button_vals.push(buttonval);
+        }
+
+        println!("l: {:?} {} p: {:?} b: {:?} ({:?})",s,intval,power,buttons,button_vals);
+
+        // ignore the jolts for now.
+        //
+
+        let m = Machine{
+            leds:intval,
+            buttons:button_vals,
+        };
+
+        machines.push(m);
     }
 
+    machines
 }
 
 
@@ -76,8 +132,51 @@ fn parse_stuff(input:String) {
 fn first(filename:&str) {
     let input = get_file_data(filename);
 
-    parse_stuff(input);
+    let machines = parse_stuff(input);
 
+    let mut res:i64 = 0;
+
+    for i in machines {
+        let mut result:Vec<Vec<i64>> = vec![];
+        let set = i.buttons.iter().powerset().collect::<Vec<_>>(); 
+        // println!("{:?}",set);
+        let mut smol:i64 = 10000;
+        //
+        for combo in set {
+            if combo.len() == 0 {
+                continue;
+            }
+
+            let mut val = 0;
+
+            for num in &combo {
+                val = val ^ *num;
+            }
+
+    //        println!("{:?} {val}",combo);
+
+            if val == i.leds {
+                let mut tmp:Vec<i64> = vec![];
+                for num in &combo {
+                    tmp.push(**num);
+                }
+                if smol > tmp.len() as i64 {
+                    smol = tmp.len() as i64; 
+                }
+                result.push(tmp);
+
+                // we have a combination that works for this machine. 
+            }
+        }
+
+        res += smol;
+         
+
+        
+        println!("{:?}",result);
+    }
+
+    println!("and we have {res}");
 
 }
 
@@ -99,6 +198,6 @@ fn second(filename:&str) {
 
 
 fn main() {
-    first("test.txt");
+    first("input.txt");
     second("test.txt");
 }
