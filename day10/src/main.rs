@@ -7,6 +7,7 @@ use std::i64;
 use std::collections::HashMap;
 use regex::Regex;
 use itertools::Itertools;
+use std::thread;
 
 
 fn read_lines<P>(filename: P) -> io::Result<io::Lines<io::BufReader<File>>> 
@@ -34,11 +35,25 @@ fn get_file_data(filename:&str) -> String {
     input
 }
 
+#[derive(Clone, Debug)]
 struct Machine {
     leds:i64,
-    buttons: Vec<i64>,
-    buttons_bin:Vec<String>,
+    buttons: Vec<Button>,
     jolts:Vec<i64>,
+}
+
+#[derive(Clone, Debug)]
+struct Button {
+    code:i64,
+    text:String,
+    bin:String,
+    set:Vec<i64>,
+}
+
+impl fmt::Display for Button {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{}", self.text)
+    }
 }
 
 fn parse_stuff(input:String) -> Vec<Machine> {
@@ -86,8 +101,7 @@ fn parse_stuff(input:String) -> Vec<Machine> {
         println!("{:?} -> {} -> {}",leds,s,intval);
 
         // parse the buttons into binary and calcurate ALL combinations 
-        let mut button_vals:Vec<i64> = vec![];
-        let mut button_bins:Vec<String> = vec![];
+        let mut button_list:Vec<Button> = vec![];
 
         for i in buttons.iter() {
 
@@ -111,8 +125,14 @@ fn parse_stuff(input:String) -> Vec<Machine> {
             let buttonval:i64 = isize::from_str_radix(bs.as_str(), 2).unwrap() as i64;
             println!("{:?} -> {} -> {}",lines,bs,buttonval);
 
-            button_vals.push(buttonval);
-            button_bins.push(bs);
+            let but = Button {
+                code:buttonval,
+                text:i.clone(),
+                bin:bs,
+                set:lines.clone(),
+            };
+
+            button_list.push(but);
         }
 
 
@@ -124,12 +144,11 @@ fn parse_stuff(input:String) -> Vec<Machine> {
             .map(|s| FromStr::from_str(s).unwrap())
             .collect::<Vec<i64>>();
             
-        println!("l: {:?} {} p: {:?} b: {:?} ({:?})",s,intval,jolts,buttons,button_vals);
+        println!("l: {:?} {} p: {:?} b: {:?} ",s,intval,jolts,button_list);
 
         let m = Machine{
             leds:intval,
-            buttons:button_vals,
-            buttons_bin:button_bins,
+            buttons:button_list,
             jolts:jolts,
         };
 
@@ -150,7 +169,10 @@ fn first(filename:&str) {
 
     for i in machines {
         let mut result:Vec<Vec<i64>> = vec![];
-        let set = i.buttons.iter().powerset().collect::<Vec<_>>(); 
+        let set = i.buttons.iter()
+            .map(|x| x.code)
+            .powerset()
+            .collect::<Vec<_>>(); 
      //    println!("XX {:?}",set);
         let mut smol:i64 = 10000;
         //
@@ -170,7 +192,7 @@ fn first(filename:&str) {
             if val == i.leds {
                 let mut tmp:Vec<i64> = vec![];
                 for num in &combo {
-                    tmp.push(**num);
+                    tmp.push(*num);
                 }
                 if smol > tmp.len() as i64 {
                     smol = tmp.len() as i64; 
@@ -192,37 +214,129 @@ fn first(filename:&str) {
 
 }
 
-
-fn get_button(jolts:&Vec<i64>,buttons:&Vec<String>) {
+fn get_buttons(jolts:&Vec<i64>,buttons:&Vec<Button>,mut depth:i64,mut book:Vec<String>) -> Option<Vec<Vec<i64>>> {
     let size:i64 =jolts.len() as i64;
 
-    // select the most important lines. (== highest jolt value.)
-    let mut map:HashMap<i64,i64> = HashMap::new(); 
-    // val -> index
 
+    let mut res:Vec<Vec<i64>> = vec![];
 
-    for (i,val) in jolts {
-        map.insert(val,i);
+    depth-=1;
+
+    if depth < 0 {
+        return None;
     }
 
-    let mut keys = Vec::from_iter(map.keys());
-    keys.sort_by(|a,b| a.cmp(b));
+    let mut filtered:HashMap<i64,Vec<i64>> = HashMap::new();
+    
+    for (index,button) in buttons.iter().enumerate() {
+        let mut tmp = jolts.clone();
+
+        for i in &button.set {
+            tmp[*i as usize] -=1;
+        }
 
 
+        let mut done = true;
+        let mut skip = false;
+        let mut sanity = false;
 
-    for i in keys {
-        let index = map.get(&i).unwrap();
+        for i in 0..size {
+            if tmp[i as usize] != jolts[i as usize] {
+                sanity = true;
+            }
 
-        if 
+
+            if tmp[i as usize] < 0 {
+                skip=true;
+                break;
+            }
+
+            if tmp[i as usize] > 0 {
+                done = false;
+            }
+        }
+
+        // we do not want this button as it will cause us to 
+        // go to negatives
+        if skip {
+            continue;
+        }
+
+        if done {
+            // we found a path to 0. every line was zero
+            // we need to return Vec<Vec<Button>>
+            // none of the other buttons will give this result so we can stop.
+            let mut r:Vec<i64>= vec![];
+            r.push(index as i64);
+            res.push(r);
+            return Some(res);
+        }
+
+        if sanity == false {
+            panic!("we did nothing");
+        }
+
+        filtered.insert(index as i64,tmp);
+    }
+
+    // println!("{:?} -> {:?}",jolts,filtered);
+    if filtered.len() == 0 {
+        // dead end 
+        
+        return None;
     }
 
 
-    // select the button that addresses the needs in order (and does 
-    // NOT put anything in negatives)
 
+    for (index, jolts) in filtered.iter() {
 
+        let check:String = jolts.iter().map(|x| x.to_string()).collect::<String>();
 
-    // return button. 
+        if book.contains(&check) {
+            continue;
+        }
+        
+        book.push(check);
+
+        match get_buttons(&jolts,&buttons,depth,book.clone()) {
+            Some(path) => {
+                // we have at least one path that were ok with 
+                // this button.
+                for p in path {
+                    let mut r = p.clone();
+                    
+                    r.push(*index as i64);
+
+                    res.push(r);
+                }
+                // free up some memory as we do not need to keep
+                // tabs on every single path. only the shortes. 
+                let mut min:i64 = -1;
+                let mut min_index = 0;
+                for (ii,pp) in res.iter().enumerate() {
+                    if min < 0 {
+                        min = pp.len() as i64;
+                        min_index = ii;
+                    }               
+                    else if min > pp.len() as i64 {
+                        min = pp.len() as i64;
+                        min_index = ii;
+                    }
+                }
+                let shortest = res[min_index].clone();
+                res.clear();
+                res.push(shortest);
+            }
+            None => {
+                // this button press was a failure. 
+            }
+        }
+    } 
+
+    if res.len() > 0 {
+        return Some(res);
+    }
+    None
 }
 
 
@@ -232,21 +346,50 @@ fn second(filename:&str) {
     let machines = parse_stuff(input);
 
     let mut res:i64 = 0;
+    println!("We go.");
 
-    for i in machines {
-        let mut result:Vec<Vec<i64>> = vec![];
+    
+    
+    for chunck in machines.chunks(16) {
+        let mut threats = vec![];    
+        for i in chunck {
+            
 
-        
-        // strategy:
-        // select the buttons to closely match the option.
-        // push button. Repeat. 
-        //
+            //let mut result:Vec<Vec<Button>> = vec![];
+            let mut book:Vec<String> = vec![];
 
+            let tmp = i.clone();
+            
+            let handle = thread::spawn(move || {
+                let result = get_buttons(&tmp.jolts,&tmp.buttons,1000,book);
+                let mut min:i64=100000;
 
+                match result {
+                    None => {println!("we failed")},
+                    Some(result) => {
+                        let mut min_i:i64=0;
+                        for (i,data) in result.iter().enumerate() {
+                            if min > data.len() as i64{
+                                min_i = i as i64;
+                                min = data.len() as i64;
+                            }
+                        }
+                        println!("shortest: {}: {:?}",result[min_i as usize].len(),result[min_i as usize]);
 
+                        
+                    }
+                }
 
-        
-        println!("{:?}",result);
+                min
+            });
+
+            threats.push(handle);
+        }
+        for i in threats {
+            let d = i.join().unwrap();
+            res +=d;
+        }
+
     }
 
     println!("and we have {res}");
