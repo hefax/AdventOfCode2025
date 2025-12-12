@@ -213,6 +213,157 @@ fn first(filename:&str) {
     println!("and we have {res}");
 
 }
+struct Matrix {
+    data:Vec<Vec<f64>>,
+    rows:usize,
+    cols:usize,
+    dependents: Vec<usize>,
+    independents: Vec<usize>,
+}
+
+// for comparing floats. Getting a zero with floats is 
+// tricky.
+const EPSILON: f64 = 1e-9;
+
+impl Matrix {
+    // build the matrix from machine. 
+    // each row has the buttons in floating point 
+    // and at the end there is the target jolts. 
+    // 
+    fn form_machine(m:&Machine) -> Self {
+        let rows = m.jolts.len();
+        let cols = m.buttons.len();
+        let mut data:Vec<Vec<f64>> = vec![vec![0.0;cols+1];rows];
+
+        for (col,button) in m.buttons.iter().enumerate() {
+            for row in &button.set {
+                data[*row as usize][col] = 1.0;
+            }
+        }
+
+        for (row,&val) in m.jolts.iter().enumerate() {
+            data[row][cols] = val as f64;
+        }
+
+        let mut matrix = Self {
+            data,
+            rows,
+            cols,
+            dependents: Vec::new(),
+            independents: Vec::new(),
+        };
+
+        matrix.gaussian_elimination();
+
+        matrix
+    }
+
+    fn gaussian_elimination(&mut self) {
+        // gaussian elimination has 3 operations
+        // 1. pivots (change row order.)
+        // 2. add/substract rows from each other
+        // 3. multiply/divide the rows with constants. 
+        // and the goal is to have a reduced row echelon form of this
+        // data. 
+
+
+        let mut pivot =0 ; // pivot row;
+        let mut col=0; // col we are examining. 
+                       //
+
+        while pivot < self.rows && col < self.cols {
+
+            // find the row for this column to pivots
+            let (brow,bval) = self.data
+                .iter()
+                .enumerate()
+                .skip(pivot) // you can't pivot with yourself.
+                .map(|(row_index,row)| (row_index,row[col].abs())) // tmp vec with just the absolute
+                                                                  // values
+                .max_by(|(_,a),(_,b)| a.partial_cmp(b).unwrap())
+                .unwrap();
+
+            // so the best value for this column was zero 
+            // (The way to check if the given absolute value 
+            // was zero. is to compare it to a number small enough )
+            // Anyway this means that the column is a free variable 
+            // add it to the independet list and move on. 
+            // Action #1
+            if bval < EPSILON {
+                self.independents.push(col);
+                col+=1;
+                continue;
+            }
+
+            // swap the data with pivot .
+            self.data.swap(pivot,brow);
+            self.dependents.push(col);
+
+                       //
+            // normalize the row. == the first value 
+            // must be 1. 
+            // Action #3
+            let pivot_val = self.data[pivot][col];
+            for val in &mut self.data[pivot][col..=self.cols] {
+                // cols before this col are all zero
+                // this col is divided by itself so it gets the value of 1.0
+                // cols after this are divided by the value of this col so they 
+                // get some floating point value. 
+                *val /= pivot_val;
+            }
+
+            // remove this column from other rows
+            // Action #2
+            for row in 0..self.rows{
+                if row != pivot {
+                    let factor = self.data[row][col];
+                    if factor.abs() > EPSILON {
+                        let pivot_row = self.data[pivot][col..=self.cols].to_vec();
+                        self.data[row][col..=self.cols]
+                            .iter_mut()
+                            .zip(&pivot_row) // combine the data of tjos row and the pivot_row
+                                             // (1,2,3,4) = (a,b,c,d) => ((1,a),(2,b),(3,c)..)
+                            .for_each(|(val,&pval)| {
+                                *val -= factor*pval;
+                            });
+                    }
+                }
+            }
+
+            pivot +=1;
+            col +=1;
+
+        }
+
+        self.independents.extend(col..self.cols);
+    }
+
+    fn valid(&self,values:&[usize]) -> Option<usize> {
+        let mut total = values.iter().sum::<usize>();
+
+        for row in 0..self.dependents.len() {
+            let val = self
+                .independents
+                .iter()
+                .enumerate()
+                .fold(self.data[row][self.cols],|acc,(i,&col)| {
+                    acc - self.data[row][col] * (values[i] as f64)
+                });
+
+            if val < -EPSILON {
+                return None;
+            }
+            let rounded = val.round();
+            if (val-rounded).abs() > EPSILON {
+                return None;
+            }
+            total += rounded as usize;
+        }
+        Some(total)
+    }
+
+}
+
 
 fn get_buttons(jolts:&Vec<i64>,buttons:&Vec<Button>,mut depth:i64,mut book:Vec<String>) -> Option<Vec<Vec<i64>>> {
     let size:i64 =jolts.len() as i64;
@@ -339,6 +490,24 @@ fn get_buttons(jolts:&Vec<i64>,buttons:&Vec<Button>,mut depth:i64,mut book:Vec<S
     None
 }
 
+fn dfs(matrix:&Matrix,idx:usize,values: &mut [usize], min:&mut usize,max:usize) {
+    if idx == matrix.independents.len() {
+        if let Some(total) = matrix.valid(values)     {
+            *min = (*min).min(total);
+        }
+        return;
+    }
+
+    let total: usize = values[..idx].iter().sum();
+
+    for val in 0..max{
+        if total + val >= *min {
+            break;
+        }
+        values[idx] = val;
+        dfs(matrix,idx+1,values,min,max);
+    }
+}
 
 fn second(filename:&str) {
     
@@ -356,11 +525,37 @@ fn second(filename:&str) {
             
 
             //let mut result:Vec<Vec<Button>> = vec![];
-            let mut book:Vec<String> = vec![];
+            // let mut book:Vec<String> = vec![];
 
-            let tmp = i.clone();
+
+            let machine = i.clone();
             
             let handle = thread::spawn(move || {
+
+
+                // get the nice matrix with reduced echelon form
+                // representation of the proble,
+                let matrix = Matrix::form_machine(&machine);
+
+                // get the max button presses (if the larges number is 95 we will never push
+                // the same button ver 100 times.. ). 
+                let max:usize = (machine.jolts.iter().max().unwrap()+1) as usize;
+                // we are searching for the smallest number. Just start from the max and go 
+                // down from there.
+                let mut min = usize::MAX;
+                // button presses. 
+                let mut values = vec![0;matrix.independents.len()];
+
+                dfs(&matrix,0,&mut values,&mut min,max);
+
+
+
+                /* This is the Original bruterforce approach.
+                 * It worked for the test data and some of the 
+                 * real inputs,
+                 * but eventually just weren't able to push through.
+                 * I did enjoy the attempt, but in the end I had to give up.
+                 *
                 let result = get_buttons(&tmp.jolts,&tmp.buttons,1000,book);
                 let mut min:i64=100000;
 
@@ -375,10 +570,8 @@ fn second(filename:&str) {
                             }
                         }
                         println!("shortest: {}: {:?}",result[min_i as usize].len(),result[min_i as usize]);
-
-                        
                     }
-                }
+                }*/
 
                 min
             });
@@ -387,7 +580,7 @@ fn second(filename:&str) {
         }
         for i in threats {
             let d = i.join().unwrap();
-            res +=d;
+            res +=d as i64;
         }
 
     }
@@ -402,5 +595,5 @@ fn second(filename:&str) {
 
 fn main() {
     first("test.txt");
-    second("test.txt");
+    second("input.txt");
 }
